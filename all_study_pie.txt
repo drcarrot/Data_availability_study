@@ -1,0 +1,6 @@
+"Data.location" "studies"
+"1" "qiita" 14
+"2" "figshare" 24
+"3" "mgrast" 134
+"4" "NCBI" 2015
+"5" "putatively missing" 469

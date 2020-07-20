@@ -1,0 +1,245 @@
+---
+title: "The archives are half-empty: a field-wide assessment of the availability of bacterial community sequencing data. Assessments from the raw data and metadata"
+output: html_notebook
+---
+
+Load packages and data
+```{r}
+lapply(c('ggfortify', 'psych','gridExtra', 'ggplot2','RColorBrewer', 'reshape2', 'vegan', 'cowplot', 'dplyr', 'gplots',  'viridis', 'tidyr', 'data.table','ggpubr','ggalluvial', 'knitr'), require,character.only=TRUE) #Load packages
+
+raw_data=read.table("code_raw_data/raw_data.txt", sep="\t")
+```
+
+Primary assessment of the data
+```{r}
+paste(c("There are", length(unique(raw_data$ID)), "unique studies"))
+
+#Collapse duplicate rows (i.e., studies for which multiple accession numbers were found into one row per study)
+raw_data_unique=raw_data %>% 
+  group_by(ID) %>%
+  slice(1)
+
+paste(c("The phrase '16S' was detected in", sum(raw_data_unique$X16ness==TRUE), "unique studies"))
+paste(c("Some reference to data deposition was detected in", sum(raw_data_unique$accession!=""),"unique studies"))
+
+```
+
+Alternative data deposition: whole study. 
+```{r}
+all_study_pie=data.frame(data.location=c("Qiita", "figshare", "MG-RAST", "INSDC", "Putatively missing"),
+                         studies=c(sum(raw_data_unique$accession=="qiita"&raw_data_unique$X16ness==TRUE&raw_data_unique$seq_method!=""),
+                                       sum(raw_data_unique$accession=="figshare"&raw_data_unique$X16ness==TRUE&raw_data_unique$seq_method!=""),
+                                       sum(raw_data_unique$accession=="mg-rast"&raw_data_unique$X16ness==TRUE&raw_data_unique$seq_method!=""),
+                                      2015, #number obtained after manually checking (i.e., that articles that simply mentioned 'bioproject' but provided no accession number were excluded)
+                                      469)) #estimated from manual inspection of a random subset of 150 articles
+
+#ensure data matches figure 1a
+all_study_pie$prop=all_study_pie$studies/sum(all_study_pie$studies)
+ggplot(all_study_pie, aes(x="", y=studies, fill=data.location))+
+  geom_bar(width = 1, stat = "identity")+ 
+  coord_polar("y", start=0)+
+  scale_fill_viridis(discrete = TRUE)+ 
+  theme_minimal()+
+  theme(axis.text.x=element_blank()) +
+  geom_text(aes(label = paste0(round(prop*100), "%")), position = position_stack(vjust = 0.8))+
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.border = element_blank(),
+    panel.grid=element_blank(),
+    axis.ticks = element_blank(),
+    plot.title=element_text(size=14, face="bold"))
+```
+Popularity of different regions of the 16S rRNA gene
+```{r}
+regions=c(as.character(raw_data_unique[which(raw_data_unique$X16ness==TRUE&raw_data_unique$seq_method!=""),]$gene_region1),
+          as.character(raw_data_unique[which(raw_data_unique$X16ness==TRUE&raw_data_unique$seq_method!=""),]$gene_region2),
+          as.character(raw_data_unique[which(raw_data_unique$X16ness==TRUE&raw_data_unique$seq_method!=""),]$gene_region3),
+          as.character(raw_data_unique[which(raw_data_unique$X16ness==TRUE&raw_data_unique$seq_method!=""),]$gene_region4),
+          as.character(raw_data_unique[which(raw_data_unique$X16ness==TRUE&raw_data_unique$seq_method!=""),]$gene_region5),
+          as.character(raw_data_unique[which(raw_data_unique$X16ness==TRUE&raw_data_unique$seq_method!=""),]$gene_region6),
+          as.character(raw_data_unique[which(raw_data_unique$X16ness==TRUE&raw_data_unique$seq_method!=""),]$gene_region7),
+          as.character(raw_data_unique[which(raw_data_unique$X16ness==TRUE&raw_data_unique$seq_method!=""),]$gene_region8),
+          as.character(raw_data_unique[which(raw_data_unique$X16ness==TRUE&raw_data_unique$seq_method!=""),]$gene_region_9))
+
+regions=regions[regions!=""]
+regions_table=as.data.frame(table(regions))
+
+ggplot(regions_table, aes(x=regions, y=Freq))+
+  geom_bar(stat="identity", fill="grey75")+
+  theme_classic2()+
+  ylab("Studies mentioning region")+
+    xlab("16S rRNA gene region")+
+    ggtitle("Frequency with which each 16S rRNA gene region is reported")+
+    geom_text(aes(label=paste0("n=",Freq)),
+            position = position_dodge(0.9),
+            vjust = 1.5, 
+            color = "white")
+
+          
+```
+
+Popularity of different sequencing techniques (to be elaborated in the main text with regards to the substudy)
+```{r}
+sequencing_methods=as.data.frame(table(as.character(raw_data_unique[which(raw_data_unique$X16ness==TRUE&raw_data_unique$seq_method!=""),]$seq_method)))
+
+ggplot(sequencing_methods, aes(x=Var1, y=Freq))+
+  geom_bar(stat="identity", fill="grey75")+
+  theme_classic2()+
+  ylab("number of studies")+
+    xlab("sequencing method")+
+    ggtitle("Frequency with which each sequencing method is used")+
+    geom_text(aes(label=paste0("n=",Freq)),
+            position = position_dodge(0.9),
+            vjust = 1.5, 
+            color = "white")
+
+```
+Assessment of metadata
+```{r}
+metadata=readRDS("code_raw_data/Metadata.RDS") #load data
+```
+
+Which environments are represented in our dataset? (Looking at the ScientificName column)
+```{r}
+Environments=list()
+Envlevels=matrix()
+for(i in 1:length(metadata)){
+  Environments[[i]]=levels(as.factor(metadata[[i]]$ScientificName))
+  Envlevels[i]=nlevels(as.factor(metadata[[i]]$ScientificName))
+}
+
+#How many studies target more than one environment? 
+kable(table(Envlevels), col.names = c("System", "# Studies"),align = "lccrr", caption = "Most datasets target a single environment")
+
+#Which environments are represented in our dataset and how frequently? 
+Environments.=unlist(Environments)
+Environments.=as.data.frame(table(Environments.))
+colnames(Environments.)=c("Environment", "Studies")
+
+ggplot(Environments.[which(Environments.$Studies>4),], aes(x=reorder(Environment, -Studies), y=Studies))+
+  geom_bar(stat="identity", fill="grey75")+
+  theme_classic2()+
+  ylab("number of studies")+
+  xlab("Environment reported")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  geom_text(aes(label=paste0(Studies)),
+            position = position_dodge(0.9),
+            vjust = 1.5, 
+            color = "white")
+
+kable(Environments.)
+dim(Environments.)
+```
+
+
+Separate metadata attributes by mandatory, and optional. Select those which are not mandatory, but are popular to focus on
+```{r}
+attributes=list()
+for(i in 1:length(metadata)){
+  attributes[[i]]=colnames((metadata[[i]]))
+}
+
+attributes=unlist(attributes)
+attributes=as.data.frame(table(attributes))
+```
+
+
+How often do people include distinguishing information in the mandatory columns? 
+```{r}
+#mandatory attributes are: 
+mandatory.attributes=attributes[which(attributes$Freq==446 ),]$attributes
+
+mandatory.attributes.info=as.data.frame(matrix(,nrow=length(metadata), ncol=length(mandatory.attributes)))
+colnames(mandatory.attributes.info)=mandatory.attributes
+nsample=matrix(,nrow=length(metadata), ncol=1)
+
+for(i in 1:length(metadata)){
+  for(j in 1:length(mandatory.attributes)){
+  mandatory.attributes.info[[i,j]]=nlevels(as.factor(metadata[[i]][,paste(mandatory.attributes[j])]))
+  nsample[i]=nrow(metadata[[i]])
+   }
+  }
+mandatory.attributes.info$nsample=nsample
+
+#most of these, with the exception of SampleName and ScientificName are uninformative from an experimental perspective and very few of the datasets contain experimental setup data in these columns 
+
+mandatory.attributes.info.l=gather(mandatory.attributes.info, key='attribute', value='samples', -c(nsample))
+
+ggplot(mandatory.attributes.info.l[which(mandatory.attributes.info.l$attribute!="Row.names"),], aes(x=samples/nsample))+
+  geom_histogram(fill="grey75", bins=  10)+
+  geom_vline(xintercept = 0, color="red")+
+  geom_vline(xintercept = 1, color="black")+
+  theme_classic2()+
+  facet_wrap(~attribute,scales="free")+
+  ylab("number of studies")+
+  xlab("factor level:number of samples")+
+  scale_x_continuous(breaks = seq(0, 1, by = 0.5))
+
+
+
+
+```
+How many samples were in each study? 
+```{r}
+ggplot(data.frame(table(nsample))[which(data.frame(table(nsample))$Freq>5),], aes(x=nsample, y=Freq))+
+  geom_bar(stat="identity", fill="grey75")+
+  theme_classic2()+
+  ylab("number of studies")+
+  xlab("Environment reported")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  geom_text(aes(label=paste0(nsample)),
+            position = position_dodge(0.9),
+            vjust = 1.5, 
+            color = "white")
+
+```
+How often do people include distinguishing information in the most popular optional columns? 
+```{r}
+#optional but popular are present in less than 446 datasets but more than 111 (25%)
+optional.attributes=attributes[which(attributes$Freq<446 & attributes$Freq>111),]$attributes
+
+
+optional.attributes.info=as.data.frame(matrix(,nrow=length(metadata), ncol=length(optional.attributes)))
+colnames(optional.attributes.info)=optional.attributes
+
+for(i in 1:length(metadata)){
+  for(j in 1:length(optional.attributes)){
+    if(paste(optional.attributes[j]) %in% names(metadata[[i]])) {
+      optional.attributes.info[[i,j]]=nlevels(as.factor(unlist(metadata[[i]][,paste(optional.attributes[j])])))
+    }
+   }
+  }
+optional.attributes.info$nsample=nsample
+
+
+
+optional.attributes.info.l=gather(optional.attributes.info, key='attribute', value='samples', -c(nsample))
+
+ggplot(optional.attributes.info.l[which(optional.attributes.info.l$attribute!="Row.names"),], aes(x=samples/nsample))+
+  geom_histogram(fill="grey75", bins=  10)+
+  geom_vline(xintercept = 0, color="red")+
+  geom_vline(xintercept = 1, color="black")+
+  theme_classic2()+
+  facet_wrap(~attribute,scales="free")+
+  ylab("number of studies")+
+  xlab("factor level:number of samples")+
+  scale_x_continuous(breaks = seq(0, 1, by = 0.5))
+```
+Heatmap of metadata 
+```{r}
+all.attributes=cbind(mandatory.attributes.info, optional.attributes.info)
+all.attributes=all.attributes[,-dim(all.attributes)[2]]
+all.attributes$Row.names=row.names(all.attributes)
+
+all.attributes.l=gather(all.attributes, key='attribute', value='samples', -c(nsample, Row.names))
+
+ggplot(all.attributes.l, aes(x=Row.names, y=attribute, fill=samples/nsample))+
+  geom_tile()+
+  scale_fill_viridis()+
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())+
+  xlab("Study")
+```
+

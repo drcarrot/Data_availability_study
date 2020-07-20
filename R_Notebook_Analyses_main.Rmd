@@ -1,0 +1,680 @@
+---
+title: "The archives are half-empty: a field-wide assessment of the availability of bacterial community sequencing data. "
+output: html_notebook
+---
+
+Set working directory, load packages
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+wd <- "/Users/sj40zura/Dropbox/In Progress/MetaMetaanalysis/Appeal/"
+datadir <- "/Users/sj40zura/Dropbox/In Progress/MetaMetaanalysis/Appeal/code_raw_data/"
+
+lapply(c('ggfortify', 'psych','gridExtra', 'ggplot2','RColorBrewer', 'reshape2', 'vegan', 'cowplot', 'dplyr', 'gplots',  'viridis', 'data.table','ggpubr','ggalluvial', 'knitr'), require,character.only=TRUE) #Load packages
+
+```
+Load mining output, count number of articles in study (this includes articles that are not amplicon-based)
+```{r}
+mining.output=read.table(paste0(datadir,"mining_output.txt"), header=TRUE)  #Load Data
+
+length(unique(mining.output$DOI))# Total articles in whole study
+
+length(unique(mining.output[which(mining.output$X16ness==TRUE & 
+                                    mining.output$X515f==TRUE & 
+                                    mining.output$X806r==TRUE ),]$ID))#Articles which are likely v3-V4
+
+length(unique(mining.output[which(mining.output$X16ness==TRUE & 
+                                    mining.output$X515f==TRUE & 
+                                    mining.output$X806r==TRUE &
+                                    (mining.output$accession=="qiita"|
+                                       mining.output$accession=='figshare'|
+                                       mining.output$accession=="mg-rast")),]$ID))#Articles which are likely v3-V4 that deposited to the three alternative databases
+```
+
+Load data for main analyses
+```{r}
+dat=readRDS(paste0(datadir,"191206_simplifiedAll.RDS"))  #Load Data
+dat$Journal <- as.factor(dat$Journal)
+levels(dat$Journal)
+
+#Homogenize names
+levels(dat$Journal)= c("Annals_of_Microbiology",
+                       "Applied_and_Environmental_Microbiology",
+                       "Applied_and_Environmental_Microbiology",
+                       "Applied_and_Environmental_Microbiology",
+                       "BMC_Genomics",
+                       "BMC_Microbiology",
+                       "BMC_Microbiology",
+                       "eLife",
+                       "Environmental_Microbiology",
+                       "Environmental_Microbiology",
+                       "Environmental_Microbiology_Reports",
+                       "FEMS_Microbiology_Ecology",
+                       "Frontiers_in_Microbiology",
+                       "Frontiers_in_Microbiology",
+                       "ISME_Journal",
+                       "Journal_of_Applied_Microbiology",
+                       "Journal_of_Microbiology",
+                       "Journal_of_Applied_Microbiology",
+                       "Journal_of_Microbiological_Methods",
+                       "Journal_of_Microbiology_Korea",
+                       "mBio",
+                       "BMC_Microbiome",
+                       "Nature_Microbiology",
+                       "Nature_Microbiology",
+                       "ISME_Journal")
+
+```
+
+Table S1. Journals included in this study
+```{r}
+datV3V4 <- readRDS(paste0(datadir,"/191206_simplifiedSub.RDS")) 
+datV3V4$Journal <- as.factor(datV3V4$Journal)
+
+Journals.table=data.frame(Matched_studies=as.matrix(table(dat$Journal)), 
+                          Matched_V3V4=as.matrix(table(dat[dat$ID %in% datV3V4$ID,]$Journal)))
+
+kable(Journals.table)
+
+```
+
+Figure 1.b Preferred locations for data storage; v3v4 region, including articles without data, which are not included in the substudy (but without studies that are not amplicon-related, those were removed manually)
+```{r}
+extras <- read.delim(paste0(datadir,"/accessions_bacteria_cleaner_onlyExtra_AHB.txt"), header=TRUE,stringsAsFactors = F)
+datV3V4_noData <- readRDS(paste0(datadir,"/200315_simplifiedV4.RDS")) 
+pie.v3v4 <- data.frame("DOI"=c(extras$DOI,
+                               datV3V4_noData$DOI[!datV3V4_noData$DOI %in% datV3V4$DOI],
+                               datV3V4$DOI),
+                    "DB"=c(extras$DB,
+                           rep("putatively INSDC",length(which(!datV3V4_noData$DOI %in% datV3V4$DOI))),
+                           rep("INSDC",nrow(datV3V4))),
+                    "year"=c(extras$Year,
+                           datV3V4_noData$Year[which(!datV3V4_noData$DOI %in% datV3V4$DOI)],
+                           datV3V4$Year),
+                    stringsAsFactors = F)
+pie.v3v4$DB[which(pie.v3v4$DB=="NCBI")] <- "putatively INSDC" #these ones give the submission ID though
+pie.v3v4$DB[which(pie.v3v4$DB=="")] <- "no data"
+pie.v3v4$DB <- as.factor(pie.v3v4$DB)
+
+sources=as.data.frame(table(pie.v3v4$DB))
+colnames(sources)=c("data.location", "studies")
+sources$prop=sources$studies/sum(sources$studies)
+
+ggplot(sources, aes(x="", y=studies, fill=factor(data.location, levels=c("figshare","INSDC", "putatively INSDC","mg-rast", "no data", "qiita" ))))+
+  geom_bar(width = 1, stat = "identity")+ 
+  coord_polar("y", start=0)+
+  scale_fill_viridis(discrete = TRUE)+ 
+  theme_minimal()+
+  theme(axis.text.x=element_blank()) +
+  geom_text(aes(label = paste0(round(prop*100), "%")), position = position_stack(vjust = 0.8))+
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.border = element_blank(),
+    panel.grid=element_blank(),
+    axis.ticks = element_blank(),
+    plot.title=element_text(size=14, face="bold"))
+
+
+```
+
+Figure 1.a Preferred locations for data storage; whole study 
+```{r}
+#data comes from supplementary data
+all_study_pie=read.table(paste0(datadir,"all_study_pie.txt"),header=TRUE,stringsAsFactors = F)
+all_study_pie$Data.location[which(all_study_pie$Data.location=="NCBI")] <- "INSDC"
+colnames(all_study_pie)=c("data.location", "studies")
+all_study_pie$prop=all_study_pie$studies/sum(all_study_pie$studies)
+all_study_pie$data.location=factor(all_study_pie$data.location, levels=c("figshare","INSDC", "mgrast", "qiita", "putatively missing"))
+
+ggplot(all_study_pie, aes(x="", y=studies, fill=data.location))+
+  geom_bar(width = 1, stat = "identity")+ 
+  coord_polar("y", start=0)+
+  scale_fill_viridis(discrete = TRUE)+ 
+  theme_minimal()+
+  theme(axis.text.x=element_blank()) +
+  geom_text(aes(label = paste0(round(prop*100), "%")), position = position_stack(vjust = 0.8))+
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.border = element_blank(),
+    panel.grid=element_blank(),
+    axis.ticks = element_blank(),
+    plot.title=element_text(size=14, face="bold"))
+
+```
+
+
+Figure S1.  Increasing popularity of INSDC databases (within V3-V4)
+```{r}
+v3v4subsacc=data.frame("year"=datV3V4$Year,
+                       "DOI"=datV3V4$DOI,stringsAsFactors = F)
+
+v3v4subs_summary=data.frame(year=as.data.frame(table(pie.v3v4$year))$Var1,
+                            all=as.data.frame(table(pie.v3v4$year))$Freq,
+                            notdeposited=as.data.frame(table(pie.v3v4$year[grep("no data",pie.v3v4$DB)]))$Freq,
+                        with.accessions=as.data.frame(table(pie.v3v4$year[grep("INSDC",pie.v3v4$DB)]))$Freq,
+                        with.alternative=as.data.frame(table(pie.v3v4$year[pie.v3v4$DB %in% c("figshare",
+                                                                                              "mg-rast",
+                                                                                              "qiita")]))$Freq,
+                        with.data=as.data.frame(table(v3v4subsacc$year))$Freq) 
+
+v3v4subs_summary$p.with.data=v3v4subs_summary$with.data/v3v4subs_summary$all
+v3v4subs_summary$p.with.accessions=v3v4subs_summary$with.accessions/v3v4subs_summary$all
+v3v4subs_summary$p.with.alternative=v3v4subs_summary$with.alternative/v3v4subs_summary$all
+
+v3v4subs_summary$with.accessions.est=v3v4subs_summary$with.accessions
+v3v4subs_summary$with.accessions.est[5]=v3v4subs_summary$with.accessions[5]*6
+
+with_accessions=ggplot(v3v4subs_summary, aes(year, p.with.accessions))+
+   geom_bar(stat="identity", fill="grey75")+
+    theme_classic2()+
+    ylab("Proportion of studies")+
+    xlab("year")+
+    geom_hline(yintercept = mean(v3v4subs_summary$p.with.accessions),
+               linetype="dashed", 
+               color="grey")+
+    ggtitle("with accession numbers detected")+
+    labs(subtitle=paste0("X2=", 
+        format(round(prop.trend.test(x=v3v4subs_summary$with.accessions, 
+        n=v3v4subs_summary$all,
+        score=as.numeric(as.character.factor(v3v4subs_summary$year)))$statistic, 2)),
+        "p=",
+        format(round(prop.trend.test(x=v3v4subs_summary$with.accessions,
+                                     n=v3v4subs_summary$all,         score=as.numeric(as.character.factor(v3v4subs_summary$year)))$p.value, 2))))+
+  geom_text(aes(label=paste0("n=",with.accessions)),
+            position = position_dodge(0.9),
+            vjust = 1.5, 
+            color = "white")+
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+
+
+
+no_data=ggplot(v3v4subs_summary, aes(year, notdeposited/all))+
+   geom_bar(stat="identity", fill="grey75")+
+    theme_classic2()+
+    ylab("Proportion of studies")+
+    xlab("year")+
+    geom_hline(yintercept = mean(v3v4subs_summary$notdeposited/v3v4subs_summary$all),
+               linetype="dashed", 
+               color="grey")+
+    ggtitle("no data detected")+
+    labs(subtitle=paste0("X2=", 
+        format(round(prop.trend.test(x=v3v4subs_summary$notdeposited, 
+                                     n=v3v4subs_summary$all,                                     score=as.numeric(as.character.factor(v3v4subs_summary$year)))$statistic, 2)),
+        "p=",
+        format(round(prop.trend.test(x=v3v4subs_summary$notdeposited,
+                                     n=v3v4subs_summary$all,         score=as.numeric(as.character.factor(v3v4subs_summary$year)))$p.value, 2))))+
+  geom_text(aes(label=paste0("n=",notdeposited)),
+            position = position_dodge(0.9),
+            vjust = 1.5, 
+            color = "white")+
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+
+
+alternative=ggplot(v3v4subs_summary, aes(year, with.alternative/all))+
+   geom_bar(stat="identity", fill="grey75")+
+    theme_classic2()+
+    ylab("Proportion of studies")+
+    xlab("year")+
+    geom_hline(yintercept = mean(v3v4subs_summary$with.alternative/v3v4subs_summary$all),
+               linetype="dashed", 
+               color="grey")+
+    ggtitle("alternative deposition")+
+    labs(subtitle=paste0("X2=", 
+        format(round(prop.trend.test(x=v3v4subs_summary$with.alternative, 
+                                     n=v3v4subs_summary$all,                                     score=as.numeric(as.character.factor(v3v4subs_summary$year)))$statistic, 2)),
+        "p=",
+        format(round(prop.trend.test(x=v3v4subs_summary$with.alternative,
+                                     n=v3v4subs_summary$all,         score=as.numeric(as.character.factor(v3v4subs_summary$year)))$p.value, 2))))+
+  geom_text(aes(label=paste0("n=",with.alternative)),
+            position = position_dodge(0.9),
+            vjust = 1.5, 
+            color = "white")+
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+
+
+
+All_data=ggplot()+
+  geom_bar(data=v3v4subs_summary, aes(year, all),stat="identity", fill="grey75")+
+    geom_hline(yintercept = mean(v3v4subs_summary$all[1:4]),
+               linetype="dashed", 
+               color="grey")+
+    geom_bar(data=v3v4subs_summary[5,], aes(year, all*6),stat="identity", fill="grey75", alpha=0.5)+
+    theme_classic2()+
+    ylab("V3- V4 studies")+
+    xlab("year")+
+    ggtitle("Total number of v3v4 studies detected")+
+    geom_text(data=v3v4subs_summary, aes(x=year, y= all, label=paste0("n=",all)),
+            position = position_dodge(0.9),
+            vjust = 1.5, 
+            color = "white")
+
+grid.arrange(All_data, with_accessions,  alternative, no_data, nrow=2)
+```
+
+
+Figure S2. Increase in data loss due to errors in data deposition over time
+```{r}
+allstudies=readRDS(paste0(datadir,"191206_simplifiedAll.RDS"))
+allstudies.=data.frame(table(allstudies[which(allstudies$TF2a==TRUE),]$Year))
+colnames(allstudies.)=c("year", "wrongaccession")
+allstudies.$notpublic=table(allstudies[which(allstudies$TF2b==FALSE),]$Year)
+allstudies.$nometadata=table(allstudies[which(allstudies$TF2c==FALSE),]$Year)
+allstudies.$all=table(allstudies$Year)
+
+alldata=ggplot()+
+  geom_bar(data=allstudies., aes(year, all),stat="identity", fill="grey75")+
+    geom_hline(yintercept = mean(allstudies.$all[1:4]),
+               linetype="dashed", 
+               color="grey")+
+    geom_bar(data=allstudies.[5,], aes(year, all*6),stat="identity", fill="grey75", alpha=0.5)+
+    theme_classic2()+
+    ylab("# studies")+
+    xlab("year")+
+    ggtitle("Total number of studies")+
+    geom_text(data=allstudies., aes(x=year, y= all, label=paste0("n=",all)),
+            position = position_dodge(0.9),
+            vjust = 1.5, 
+            color = "white")
+
+wrongaccession=ggplot(allstudies., aes(year, wrongaccession/all))+
+   geom_bar(stat="identity", fill="grey75")+
+    theme_classic2()+
+    ylab("% studies")+
+    xlab("year")+
+    geom_hline(yintercept = mean(allstudies.$wrongaccession/allstudies.$all),
+               linetype="dashed", 
+               color="grey")+
+    ggtitle("Incorrect accessions")+
+    labs(subtitle=paste0("X2=", 
+        format(round(prop.trend.test(x=allstudies.$wrongaccession, 
+        n=allstudies.$all,
+        score=as.numeric(as.character.factor(allstudies.$year)))$statistic, 2)),
+        "p=",
+        format(round(prop.trend.test(x=allstudies.$wrongaccession,
+                                     n=allstudies.$all,         score=as.numeric(as.character.factor(allstudies.$year)))$p.value, 2))))+
+  geom_text(aes(label=paste0("n=",wrongaccession)),
+            position = position_dodge(0.9),
+            vjust = 1.5, 
+            color = "white")+
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+
+
+
+notpublic=ggplot(allstudies., aes(year, notpublic/all))+
+   geom_bar(stat="identity", fill="grey75")+
+    theme_classic2()+
+    ylab("% studies")+
+    xlab("year")+
+    geom_hline(yintercept = mean(allstudies.$notpublic/allstudies.$all),
+               linetype="dashed", 
+               color="grey")+
+    ggtitle("not public")+
+    labs(subtitle=paste0("X2=", 
+        format(round(prop.trend.test(x=allstudies.$notpublic, 
+                                     n=allstudies.$all,                                     score=as.numeric(as.character.factor(allstudies.$year)))$statistic, 2)),
+        "p=",
+        format(round(prop.trend.test(x=allstudies.$notpublic,
+                                     n=allstudies.$all,         score=as.numeric(as.character.factor(allstudies.$year)))$p.value, 2))))+
+  geom_text(aes(label=paste0("n=",notpublic)),
+            position = position_dodge(0.9),
+            vjust = 1.5, 
+            color = "white")+
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+
+
+nometadata=ggplot(allstudies., aes(year, nometadata/all))+
+   geom_bar(stat="identity", fill="grey75")+
+    theme_classic2()+
+    ylab("% studies")+
+    xlab("year")+
+    geom_hline(yintercept = mean(allstudies.$nometadata/allstudies.$all),
+               linetype="dashed", 
+               color="grey")+
+    ggtitle("no metadata")+
+    labs(subtitle=paste0("X2=", 
+        format(round(prop.trend.test(x=allstudies.$nometadata, 
+                                     n=allstudies.$all,                                     score=as.numeric(as.character.factor(allstudies.$year)))$statistic, 2)),
+        "p=",
+        format(round(prop.trend.test(x=allstudies.$nometadata,
+                                     n=allstudies.$all,         score=as.numeric(as.character.factor(allstudies.$year)))$p.value, 2))))+
+  geom_text(aes(label=paste0("n=",nometadata)),
+            position = position_dodge(0.9),
+            vjust = 1.5, 
+            color = "white")+
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+
+
+grid.arrange(alldata, wrongaccession,  notpublic, nometadata, nrow=2)
+
+
+```
+
+
+Figure 3: The fate of bacterial community sequencing data: create t/f data frame
+```{r}
+v3v4fate <- data.frame("DOI"=c(extras$DOI,
+                               datV3V4_noData$DOI[!datV3V4_noData$DOI %in% datV3V4$DOI],
+                               datV3V4$DOI),
+                    "year"=c(extras$Year,
+                           datV3V4_noData$Year[which(!datV3V4_noData$DOI %in% datV3V4$DOI)],
+                           datV3V4$Year),
+                    rbind(data.frame("Journal"=rep(NA,nrow(extras)),
+                  "TF2a"=F,
+                  "TF2b"=F,
+                  "TF2c"=F,
+                  "TF3a"=F,
+                  "TF3b"=F,
+                  "TF3c"=F,
+                  "TF3d"=F,
+                  "TF4a"=F,
+                  "TF4b"=F),
+                  data.frame("Journal"=datV3V4_noData$Journal[which(!datV3V4_noData$DOI %in% datV3V4$DOI)],
+                  "TF2a"=T,
+                  "TF2b"=F,
+                  "TF2c"=F,
+                  "TF3a"=F,
+                  "TF3b"=F,
+                  "TF3c"=F,
+                  "TF3d"=F,
+                  "TF4a"=F,
+                  "TF4b"=F),
+                  datV3V4[,c("Journal","TF2a","TF2b","TF2c","TF3a","TF3b","TF3c","TF3d","TF4a","TF4b")]),
+                    stringsAsFactors = F)
+  
+  
+v3v4fate$TF1a=pie.v3v4$DB[match(pie.v3v4$DOI, v3v4fate$DOI)]
+
+#Clean up time! TF3d is inverted 
+v3v4fate[which(v3v4fate$TF3d),]$TF3d="TR"
+v3v4fate[which(v3v4fate$TF3d=="FALSE"),]$TF3d="FA"
+
+v3v4fate[which(v3v4fate$TF1a!="INSDC" | 
+                              !v3v4fate$TF2b |
+                              !v3v4fate$TF3a |
+                              !v3v4fate$TF3b |
+                              !v3v4fate$TF3c ),]$TF3d= "FALSE"
+
+v3v4fate[which(v3v4fate$TF3d=="FA"),]$TF3d="TRUE"
+v3v4fate[which(v3v4fate$TF3d=="TR"),]$TF3d="FALSE"
+
+
+#Cleanup time! Order is TF1A, TF2B, TF3A, TF3C, TF3B, TF3D, TF4a, TF4b; if a study was FALSE in the previous step, a NA is inherited. 
+v3v4fate[which(!grepl("INSDC",v3v4fate$TF1a)),]$TF2b="NA"
+v3v4fate[which(v3v4fate$TF2b=="FALSE"|v3v4fate$TF2b=="NA"),]$TF3a="NA"
+v3v4fate[which(v3v4fate$TF3a=="FALSE"|v3v4fate$TF3a=="NA"),]$TF3c="NA"
+v3v4fate[which(v3v4fate$TF3c=="FALSE"|v3v4fate$TF3c=="NA"),]$TF3b="NA"
+v3v4fate[which(v3v4fate$TF3b=="FALSE"|v3v4fate$TF3b=="NA"),]$TF3d="NA"
+v3v4fate[which(v3v4fate$TF3c=="NA"),]$TF4a="NA"
+v3v4fate[which(v3v4fate$TF3c=="NA"),]$TF4b="NA"
+
+
+
+#Cleanup time! merge TF4a and TF4b into a single "mislabeled" category
+v3v4fate$TF4 = factor(ifelse(v3v4fate$TF4a=="FALSE"|v3v4fate$TF4b=="FALSE", "Mislabeled", "TRUE"))
+
+#Cleanup time! Give "False" a distinct meaning for each category. 
+v3v4fate[which(v3v4fate$TF2b=="FALSE"),]$TF2b="unavailable"
+# v3v4fate[which(v3v4fate$TF3a=="FALSE"),]$TF3a="no sequences" #commenting out until i know whats up with 2
+v3v4fate[which(v3v4fate$TF3c=="FALSE"),]$TF3c="no quality scores"
+v3v4fate[which(v3v4fate$TF3b=="FALSE"),]$TF3b="not demultiplexed"
+v3v4fate[which(v3v4fate$TF3d=="FALSE"),]$TF3d="primers present"
+
+v3v4fate$TF3=as.character(v3v4fate$TF3b)
+v3v4fate[which(v3v4fate$TF3c=="no quality scores"),]$TF3="no quality scores"
+v3v4fate[which(v3v4fate$TF3b=="not demultiplexed"),]$TF3="not demultiplexed"
+v3v4fate[which(v3v4fate$TF3d=="primers present"),]$TF3="primers present"
+
+
+#Clean up time!TF2a and TF2c are irrelevant since they are false for all 
+v3v4fate.=data.frame(DOI=v3v4fate$DOI,
+                  year=v3v4fate$year,
+                  Data_location=v3v4fate$TF1a,
+                  Data_deposition=v3v4fate$TF2b,
+                #  Contains_sequences=v3v4fate$TF3a, #commenting out until i know if some paper fits here
+                  Data_format=as.factor(v3v4fate$TF3),
+                  Mislabeled=v3v4fate$TF4)
+
+v3v4fate.$Data_location=factor(v3v4fate.$Data_location, levels=c("INSDC","putatively INSDC","figshare", "qiita", "mg-rast","no data"))
+
+#Separate mislabeled data into mislabeled primers present and mislabeled and otherwise great
+v3v4fate.$Data_labeling=ifelse(v3v4fate.$Data_format=="primers present" &v3v4fate.$Mislabeled=="Mislabeled", "Mislabeled",
+                               ifelse(v3v4fate.$Data_format=="primers present" & v3v4fate.$Mislabeled==TRUE, "primers present",
+                                      ifelse(v3v4fate.$Data_format=="TRUE" &v3v4fate.$Mislabeled=="Mislabeled", "Mislabeled", "TRUE")))
+
+alluvial= as.data.frame(table(v3v4fate.[,c(3:5,7)]))
+alluvial=alluvial[alluvial$Freq>0,]
+alluvial$Data_labeling=as.character(alluvial$Data_labeling)
+alluvial$Data_format=as.character(alluvial$Data_format)
+alluvial[which(alluvial$Data_format=="NA"|alluvial$Data_format=="no quality scores"|alluvial$Data_format=="not demultiplexed"),]$Data_labeling="NA"
+#alluvial[which(alluvial$Data_format!="TRUE"|alluvial$Data_format!="primers present"),]$Data_labeling="NA"
+#alluvial[which(alluvial$Data_format=="primers present"),]$Data_labeling="Mislabeled"
+alluvial[alluvial== "NA"] <- NA
+
+```
+
+Figure 3: the fate of bacterial community sequencing data.
+```{r}
+a<- to_lodes_form(as.data.frame(alluvial),
+                           axes = 1:4,
+                           id = "Type")
+a$data.availability=factor(ifelse(a$stratum=="TRUE"|a$stratum=="INSDC", "Reusable", ifelse(a$stratum=="Mislabeled"|a$stratum=="primers present","Partially reusable", "Not available")))
+
+
+a$stratum=factor(a$stratum, levels=c("TRUE","INSDC", "putatively INSDC","figshare", "qiita", "mg-rast", "no data", "NA", "unavailable", "no quality scores", "not demultiplexed", "primers present", "Mislabeled"))
+
+#For an easier lewk trigger this one. 
+#a$stratum=factor(a$stratum, levels=c("TRUE","gene repositories", "figshare", "qiita", "mg-rast", "no data", "NA", "unavailable", "no quality scores", "not demultiplexed", "primers present", "Mislabeled"))
+
+ggplot(a,
+      aes(x = x, stratum = stratum, alluvium = Type, y=Freq,fill=data.availability)) +
+      geom_flow(color = "gray",aes.flow = "backward", na.rm=TRUE) +
+      geom_stratum(na.rm = TRUE) +
+      stat_stratum(geom = "text", aes(label = stratum), na.rm = TRUE)+
+      theme(legend.position = "bottom")+
+      theme_classic()+
+      scale_fill_viridis(discrete=TRUE)
+```
+Figure 2a and 2b Errors in data formatting: 
+```{r}
+v3v4fate <- data.frame("DOI"=c(extras$DOI,
+                               datV3V4_noData$DOI[!datV3V4_noData$DOI %in% datV3V4$DOI],
+                               datV3V4$DOI),
+                    "year"=c(extras$Year,
+                           datV3V4_noData$Year[which(!datV3V4_noData$DOI %in% datV3V4$DOI)],
+                           datV3V4$Year),
+                    rbind(data.frame("Journal"=rep(NA,nrow(extras)),
+                  "TF2a"=F,
+                  "TF2b"=F,
+                  "TF2c"=F,
+                  "TF3a"=F,
+                  "TF3b"=F,
+                  "TF3c"=F,
+                  "TF3d"=F,
+                  "TF4a"=F,
+                  "TF4b"=F),
+                  data.frame("Journal"=datV3V4_noData$Journal[which(!datV3V4_noData$DOI %in% datV3V4$DOI)],
+                  "TF2a"=T,
+                  "TF2b"=F,
+                  "TF2c"=F,
+                  "TF3a"=F,
+                  "TF3b"=F,
+                  "TF3c"=F,
+                  "TF3d"=F,
+                  "TF4a"=F,
+                  "TF4b"=F),
+                  datV3V4[,c("Journal","TF2a","TF2b","TF2c","TF3a","TF3b","TF3c","TF3d","TF4a","TF4b")]),
+                    stringsAsFactors = F)
+v3v4fate$TF1a=pie.v3v4$DB[match(pie.v3v4$DOI, v3v4fate$DOI)]
+
+
+v3v4data_formatting=data.frame(year=as.data.frame(table(v3v4fate.[which(v3v4fate.$Data_location=="INSDC"),]$year))$Var1,
+                              all=as.data.frame(table(v3v4fate.[which(v3v4fate.$Data_location=="INSDC"),]$year))$Freq,
+                              onefasta=as.data.frame(table(v3v4fate[which(v3v4fate$TF3b==FALSE & v3v4fate$TF1a=="INSDC"&v3v4fate$TF3a=="TRUE"),]$year))$Freq,
+                              noqual=c(0,as.data.frame(table(v3v4fate[which(v3v4fate$TF3c==FALSE& v3v4fate$TF1a=="INSDC"&v3v4fate$TF3a=="TRUE"),]$year))$Freq,0),
+primers=as.data.frame(table(v3v4fate[which(v3v4fate$TF3d==TRUE& v3v4fate$TF1a=="INSDC"&v3v4fate$TF3a=="TRUE"),]$year))$Freq)
+
+
+
+onefasta=ggplot(v3v4data_formatting, aes(year, onefasta/all))+
+   geom_bar(stat="identity", fill="grey75")+
+    theme_classic2()+
+    ylab("% studies")+
+    xlab("year")+
+    geom_hline(yintercept = mean(v3v4data_formatting$onefasta/v3v4data_formatting$all),
+               linetype="dashed", 
+               color="grey")+
+    ggtitle("one fasta")+
+    labs(subtitle=paste0("X2=", 
+        format(round(prop.trend.test(x=v3v4data_formatting$onefasta, 
+                                     n=v3v4data_formatting$all,                                     score=as.numeric(as.character.factor(v3v4data_formatting$year)))$statistic, 2)),
+        "p=",
+        format(round(prop.trend.test(x=v3v4data_formatting$onefasta,
+                                     n=v3v4data_formatting$all,         score=as.numeric(as.character.factor(v3v4data_formatting$year)))$p.value, 2))))+
+  geom_text(aes(label=paste0("n=",onefasta)),
+            position = position_dodge(0.9),
+            vjust = 1.5, 
+            color = "white")+
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+
+
+
+All_datas=ggplot()+
+  geom_bar(data=v3v4data_formatting, aes(year, all),stat="identity", fill="grey75")+
+    geom_hline(yintercept = mean(v3v4data_formatting$all[1:4]),
+               linetype="dashed", 
+               color="grey")+
+    geom_bar(data=v3v4data_formatting[5,], aes(year, all*6),stat="identity", fill="grey75", alpha=0.5)+
+    theme_classic2()+
+    ylab("V3- V4 studies")+
+    xlab("year")+
+    ggtitle("v3v4 studies with accession #")+
+    geom_text(data=v3v4data_formatting, aes(x=year, y= all, label=paste0("n=",all)),
+            position = position_dodge(0.9),
+            vjust = 1.5, 
+            color = "white")
+
+grid.arrange(All_datas, onefasta,ncol=2)
+
+```
+Figure 2c Trends in amplicon sequencing platforms over time
+```{r}
+datV3V4.table=as.data.frame(table(datV3V4$Year, datV3V4$Tech))
+colnames(datV3V4.table)=c("Year", "Platform", "Freq")
+bar=ggplot(datV3V4.table, aes(x=Year, y=Freq))+
+  geom_bar(aes(fill=Platform),position="fill", stat="identity")+
+  scale_fill_viridis(discrete=TRUE)+
+  scale_y_continuous(labels = scales::percent)+
+  theme_classic2()
+
+bar
+
+#For illumina
+prop.trend.test(x=datV3V4.table[which(datV3V4.table$Platform=="ILLUMINA"),]$Freq, 
+                                     n=as.data.frame(table(datV3V4$Year))$Freq,                                     score=as.numeric(as.character.factor(as.data.frame(table(datV3V4$Year))$Var1)))
+
+#For 454
+prop.trend.test(x=datV3V4.table[which(datV3V4.table$Platform=="LS454"),]$Freq, 
+                                     n=as.data.frame(table(datV3V4$Year))$Freq,                                     score=as.numeric(as.character.factor(as.data.frame(table(datV3V4$Year))$Var1)))
+```
+
+Figure S3: errors in data labeling and data formatting
+```{r}
+v3v4data_labeling=data.frame(year=as.data.frame(table(v3v4fate[which(v3v4fate$TF3c==TRUE),]$year))$Var1,
+                              all=as.data.frame(table(v3v4fate[which(v3v4fate$TF3c==TRUE),]$year))$Freq,
+                              notamplicon=as.data.frame(table(v3v4fate[which(v3v4fate$TF3c==TRUE & v3v4fate$TF4a=="FALSE"),]$year))$Freq,
+                              notpaired=as.data.frame(table(v3v4fate[which(v3v4fate$TF3c==TRUE& v3v4fate$TF4b==FALSE),]$year))$Freq)
+
+
+notamplicon=ggplot(v3v4data_labeling, aes(year, notamplicon/all))+
+   geom_bar(stat="identity", fill="grey75")+
+    theme_classic2()+
+    ylab("% studies")+
+    xlab("year")+
+    geom_hline(yintercept = mean(v3v4data_labeling$notamplicon/v3v4data_labeling$all),
+               linetype="dashed", 
+               color="grey")+
+    ggtitle("Not amplicon")+
+    labs(subtitle=paste0("X2=", 
+        format(round(prop.trend.test(x=v3v4data_labeling$notamplicon, 
+                                     n=v3v4data_labeling$all,                                     score=as.numeric(as.character.factor(v3v4data_labeling$year)))$statistic, 2)),
+        "p=",
+        format(round(prop.trend.test(x=v3v4data_labeling$notamplicon,
+                                     n=v3v4data_labeling$all,         score=as.numeric(as.character.factor(v3v4data_labeling$year)))$p.value, 2))))+
+  geom_text(aes(label=paste0("n=",notamplicon)),
+            position = position_dodge(0.9),
+            vjust = 1.5, 
+            color = "white")+
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+
+
+notpaired=ggplot(v3v4data_labeling, aes(year, notpaired/all))+
+   geom_bar(stat="identity", fill="grey75")+
+    theme_classic2()+
+    ylab("% studies")+
+    xlab("year")+
+    geom_hline(yintercept = mean(v3v4data_labeling$notpaired/v3v4data_labeling$all),
+               linetype="dashed", 
+               color="grey")+
+    ggtitle("not paired")+
+    labs(subtitle=paste0("X2=", 
+        format(round(prop.trend.test(x=v3v4data_labeling$notpaired, 
+                                     n=v3v4data_labeling$all,                                     score=as.numeric(as.character.factor(v3v4data_labeling$year)))$statistic, 2)),
+        "p=",
+        format(round(prop.trend.test(x=v3v4data_labeling$notpaired,
+                                     n=v3v4data_labeling$all,         score=as.numeric(as.character.factor(v3v4data_labeling$year)))$p.value, 2))))+
+  geom_text(aes(label=paste0("n=",notpaired)),
+            position = position_dodge(0.9),
+            vjust = 1.5, 
+            color = "white")+
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+
+
+noqual=ggplot(v3v4data_formatting, aes(year, noqual/all))+
+   geom_bar(stat="identity", fill="grey75")+
+    theme_classic2()+
+    ylab("% studies")+
+    xlab("year")+
+    geom_hline(yintercept = mean(v3v4data_formatting$noqual/v3v4data_formatting$all),
+               linetype="dashed", 
+               color="grey")+
+    ggtitle("No quality scores")+
+    labs(subtitle=paste0("X2=", 
+        format(round(prop.trend.test(x=v3v4data_formatting$noqual, 
+                                     n=v3v4data_formatting$all,                                     score=as.numeric(as.character.factor(v3v4data_formatting$year)))$statistic, 2)),
+        "p=",
+        format(round(prop.trend.test(x=v3v4data_formatting$noqual,
+                                     n=v3v4data_formatting$all,         score=as.numeric(as.character.factor(v3v4data_formatting$year)))$p.value, 2))))+
+  geom_text(aes(label=paste0("n=",noqual)),
+            position = position_dodge(0.9),
+            vjust = 1.5, 
+            color = "white")+
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+
+
+
+
+primers=ggplot(v3v4data_formatting, aes(year, primers/all))+
+   geom_bar(stat="identity", fill="grey75")+
+    theme_classic2()+
+    ylab("% studies")+
+    xlab("year")+
+    geom_hline(yintercept = mean(v3v4data_formatting$primers/v3v4data_formatting$all),
+               linetype="dashed", 
+               color="grey")+
+    ggtitle("primers present")+
+    labs(subtitle=paste0("X2=", 
+        format(round(prop.trend.test(x=v3v4data_formatting$primers, 
+                                     n=v3v4data_formatting$all,                                     score=as.numeric(as.character.factor(v3v4data_formatting$year)))$statistic, 2)),
+        "p=",
+        format(round(prop.trend.test(x=v3v4data_formatting$primers,
+                                     n=v3v4data_formatting$all,         score=as.numeric(as.character.factor(v3v4data_formatting$year)))$p.value, 2))))+
+  geom_text(aes(label=paste0("n=",primers)),
+            position = position_dodge(0.9),
+            vjust = 1.5, 
+            color = "white")+
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+
+grid.arrange(notamplicon, notpaired,noqual, primers, nrow=2)
+```
+
