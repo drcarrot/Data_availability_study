@@ -4,11 +4,11 @@ This repository contains code and data for the assessment of the availability of
 The following files are included: 
 
 ## Jupyter notebook to perform the literature research
-This uses code from <https://github.com/komax/teitocs>:
 * [pdf2seqs.ipynb](../../blob/master/pdf2seqs.ipynb)
-* [pdf2seq.yaml](../../blob/master/pdf2seq.yaml)
 * [pdf2seqs.html](../../blob/master/pdf2seqs.html)
 * [pdf2seqs.md](../../blob/master/pdf2seqs.md)
+This uses code from <https://github.com/komax/teitocsv>
+and a conda environment: [pdf2seq.yaml](../../blob/master/pdf2seq.yaml)
 
 ## R notebooks to visualize the analysis results:
 Main figures:
