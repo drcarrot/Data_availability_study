@@ -15,6 +15,7 @@ and a conda environment: [pdf2seq.yaml](../../blob/master/pdf2seq.yaml)
 Main figures:
 * [R_Notebook_Analyses_main.Rmd](../../blob/master/R_Notebook_Analyses_main.Rmd)
 * [R_Notebook_Analyses_main.nb.html](../../blob/master/R_Notebook_Analyses_main.nb.html)
+
 with input data:
 * [mining_output.txt](../../blob/master/mining_output.txt)
 * [191206_simplifiedAll.RDS](../../blob/master/191206_simplifiedAll.RDS)
@@ -26,6 +27,7 @@ with input data:
 Analysis of raw and metadata:
 * [R_Notebook_Analyses_Raw_data_and_metadata.Rmd](../../blob/master/R_Notebook_Analyses_Raw_data_and_metadata.Rmd)
 * [R_Notebook_Analyses_Raw_data_and_metadata.nb.html](../../blob/master/R_Notebook_Analyses_Raw_data_and_metadata.nb.html)
+
 with input data:
 * [Metadata.RDS](../../blob/master/Metadata.RDS)
 * [raw_data.txt](../../blob/master/raw_data.txt)
