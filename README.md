@@ -1,3 +1,7 @@
+[![DOI](https://zenodo.org/badge/281296908.svg)](https://zenodo.org/badge/latestdoi/281296908)
+
+
+
 # Data availability study
 
 This repository contains code and data for the assessment of the availability of microbial community sequencing data by Stephanie D. Jurburg, Maximilian Konzack, Nico Eisenhauer, and Anna Heintz-Buschart. 
